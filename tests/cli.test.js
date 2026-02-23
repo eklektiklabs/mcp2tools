@@ -57,7 +57,7 @@ describe('CLI Tests', () => {
     const result = await runCli(['generate', '--output', './output']);
     
     assert.notStrictEqual(result.code, 0);
-    assert.ok(result.stderr.includes('--config is required'));
+    assert.ok(result.stderr.includes('--config or --configs is required'));
   });
 
   it('should show error when output is missing for generate', async () => {
@@ -126,5 +126,41 @@ describe('CLI Tests', () => {
     
     // Note: Exit code may be non-zero if MCP server is not available
     assert.ok(result.stdout.includes('Tools: ["one","two","three"]'));
+  });
+
+  it('should parse --verbose flag', async () => {
+    const result = await runCli(['generate', '--config', './c.json', '--output', './o', '--verbose']);
+    
+    // Note: Exit code may be non-zero if MCP server is not available
+    assert.ok(result.stdout.includes('Verbose: true'));
+  });
+
+  it('should parse -v shorthand for verbose', async () => {
+    const result = await runCli(['generate', '--config', './c.json', '--output', './o', '-v']);
+    
+    // Note: Exit code may be non-zero if MCP server is not available
+    assert.ok(result.stdout.includes('Verbose: true'));
+  });
+
+  it('should parse --no-cache flag', async () => {
+    const result = await runCli(['generate', '--config', './c.json', '--output', './o', '--no-cache']);
+    
+    // Note: Exit code may be non-zero if MCP server is not available
+    assert.ok(result.stdout.includes('No Cache: true'));
+  });
+
+  it('should parse --configs flag for multi-server', async () => {
+    const result = await runCli(['generate', '--configs', './config1.json,./config2.json', '--output', './o']);
+    
+    // Note: Exit code may be non-zero if MCP server is not available
+    assert.ok(result.stdout.includes('Configs: ["./config1.json","./config2.json"]'));
+  });
+
+  it('should allow both --verbose and --no-cache together', async () => {
+    const result = await runCli(['generate', '--config', './c.json', '--output', './o', '--verbose', '--no-cache']);
+    
+    // Note: Exit code may be non-zero if MCP server is not available
+    assert.ok(result.stdout.includes('Verbose: true'));
+    assert.ok(result.stdout.includes('No Cache: true'));
   });
 });

@@ -11,6 +11,7 @@ import { generateDocs, copyConfig } from './docs.js';
 
 const VALID_FLAGS = [
   'config',
+  'configs',
   'output',
   'type',
   'typescript',
@@ -33,6 +34,7 @@ export const parseArgs = (argv) => {
     return {
       command: 'help',
       config: null,
+      configs: null,
       output: null,
       type: 'anthropic',
       typescript: false,
@@ -56,6 +58,7 @@ export const parseArgs = (argv) => {
     return {
       command: 'help',
       config: null,
+      configs: null,
       output: null,
       type: 'anthropic',
       typescript: false,
@@ -72,6 +75,7 @@ export const parseArgs = (argv) => {
   const result = {
     command,
     config: null,
+    configs: null,
     output: null,
     type: 'anthropic',
     typescript: false,
@@ -144,6 +148,8 @@ export const parseArgs = (argv) => {
 
     if (flag === 'config') {
       result.config = nextArg;
+    } else if (flag === 'configs') {
+      result.configs = nextArg.split(',').map(c => c.trim()).filter(c => c);
     } else if (flag === 'output') {
       result.output = nextArg;
     } else if (flag === 'type') {
@@ -170,8 +176,9 @@ const validateArgs = (args) => {
   }
 
   if (args.command === 'generate') {
-    if (!args.config) {
-      throw ValidationError('--config is required');
+    // Allow either --config (single) or --configs (multi)
+    if (!args.config && !args.configs) {
+      throw ValidationError('--config or --configs is required');
     }
     if (!args.output) {
       throw ValidationError('--output is required');
@@ -186,6 +193,7 @@ Commands:
   generate    Generate MCP server tools
   help        Show this help message
   --config <path>     Path to MCP server config JSON (required for generate)
+  --configs <paths>   Comma-separated paths to multiple MCP server configs
   --output <path>    Output directory (required for generate)
   --type <value>      Provider type: anthropic (default) or openai
   --typescript       Generate TypeScript instead of JavaScript
@@ -202,10 +210,11 @@ Example:
 };
 
 const generateCommand = async (args) => {
-  const { config, output, type, typescript, noDocs, tools, name, force, dryRun, verbose, noCache } = args;
+  const { config, configs, output, type, typescript, noDocs, tools, name, force, dryRun, verbose, noCache } = args;
   // Debug output for testing
   console.log(`Command: ${args.command}`);
   console.log(`Config: ${config}`);
+  console.log(`Configs: ${JSON.stringify(configs)}`);
   console.log(`Output: ${output}`);
   console.log(`Type: ${type}`);
   console.log(`TypeScript: ${typescript}`);
@@ -219,27 +228,47 @@ const generateCommand = async (args) => {
   
   console.log('Generating MCP tools...');
   
-  // Load config
-  const loadedConfig = loadConfig(config);
-  if (verbose) {
-    console.debug(`[verbose] Config loaded: ${loadedConfig.name} (${loadedConfig.type})`);
-    console.debug(`[verbose] Config details: ${JSON.stringify({ command: loadedConfig.command, args: loadedConfig.args, url: loadedConfig.url })}`);
+  let loadedConfigs = [];
+  let isMultiServer = false;
+  
+  // Handle multi-server mode (--configs flag)
+  if (configs && configs.length > 0) {
+    isMultiServer = true;
+    for (const configPath of configs) {
+      const loadedConfig = loadConfig(configPath);
+      if (verbose) {
+        console.debug(`[verbose] Config loaded: ${loadedConfig.name} (${loadedConfig.type})`);
+      }
+      loadedConfigs.push(loadedConfig);
+    }
+    console.log(`MCP Servers: ${loadedConfigs.map(c => c.name).join(', ')}`);
+  } else {
+    // Single server mode (--config flag)
+    const loadedConfig = loadConfig(config);
+    if (verbose) {
+      console.debug(`[verbose] Config loaded: ${loadedConfig.name} (${loadedConfig.type})`);
+      console.debug(`[verbose] Config details: ${JSON.stringify({ command: loadedConfig.command, args: loadedConfig.args, url: loadedConfig.url })}`);
+    }
+    
+    // Override name if provided (single server only)
+    if (name) {
+      loadedConfig.name = name;
+    }
+    
+    console.log(`MCP Server: ${loadedConfig.name} (${loadedConfig.type})`);
+    loadedConfigs = [loadedConfig];
   }
   
-  // Override name if provided
-  if (name) {
-    loadedConfig.name = name;
-  }
-  
-  console.log(`MCP Server: ${loadedConfig.name} (${loadedConfig.type})`);
-  
-  // Introspect MCP server
-  console.log('Introspecting MCP server...');
+  // Introspect MCP server(s)
+  console.log('Introspecting MCP server(s)...');
   if (verbose) {
     console.debug(`[verbose] Attempting MCP server connection...`);
     console.debug(`[verbose] Connection options: ${JSON.stringify({ verbose, noCache })}`);
   }
-  let mcpTools = await introspectMcpServer(loadedConfig, { verbose, noCache });
+  
+  // Pass array for multi-server, single config for backward compatibility
+  const serverConfig = isMultiServer ? loadedConfigs : loadedConfigs[0];
+  let mcpTools = await introspectMcpServer(serverConfig, { verbose, noCache });
   
   // Filter tools if specified
   if (tools && tools.length > 0) {
@@ -272,8 +301,11 @@ const generateCommand = async (args) => {
     }
   }
   
+  // Use first config as primary for code generation (multi-server stores array in config.json)
+  const primaryConfig = isMultiServer ? { name: 'multi-server', type: 'multi', servers: loadedConfigs.map(c => c.name) } : loadedConfigs[0];
+  
   // Generate tools code
-  const code = generateCode(mcpTools, loadedConfig, {
+  const code = generateCode(mcpTools, primaryConfig, {
     templateName: typescript
       ? (type === 'openai' ? 'tools.openai.ts' : 'tools.ts')
       : (type === 'openai' ? 'tools.openai.js' : 'tools.js'),
@@ -282,20 +314,20 @@ const generateCommand = async (args) => {
   });
   
   // Generate demo code
-  const demoCode = generateCode(mcpTools, loadedConfig, {
+  const demoCode = generateCode(mcpTools, primaryConfig, {
     templateName: typescript ? 'demo.ts' : 'demo.js',
     type: type,
     includeHandlers: true
   });
   
   // Generate docs
-  const docs = noDocs ? null : generateDocs(mcpTools, loadedConfig);
+  const docs = noDocs ? null : generateDocs(mcpTools, primaryConfig);
   
   // Output plan
   const filesToWrite = [
     { path: toolsFile, content: code },
     { path: demoFile, content: demoCode },
-    { path: configFile, content: JSON.stringify(loadedConfig, null, 2) }
+    { path: configFile, content: JSON.stringify(isMultiServer ? { isMultiServer: true, servers: loadedConfigs } : loadedConfigs[0], null, 2) }
   ];
   
   if (docs) {

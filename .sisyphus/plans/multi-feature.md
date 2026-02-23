@@ -270,7 +270,7 @@ Wave FINAL - Verification:
     Expected Result: Debug logs visible
     Evidence: .sisyphus/evidence/task-4-verbose.txt
 
-- [ ] 5. Add --configs flag for multi-server
+ [x] 5. Add --configs flag for multi-server
 
   **What to do**:
   - Add 'configs' to VALID_FLAGS
@@ -308,7 +308,7 @@ Wave FINAL - Verification:
     Expected Result: Flag documented
     Evidence: .sisyphus/evidence/task-5-help.txt
 
-- [ ] 6. Modify introspect for multi-server with namespace
+ [x] 6. Modify introspect for multi-server with namespace
 
   **What to do**:
   - Modify introspect to accept array of configs
@@ -351,7 +351,7 @@ Wave FINAL - Verification:
     Expected Result: Tools prefixed with server names
     Evidence: .sisyphus/evidence/task-6-multi.txt
 
-- [ ] 7. Update demo.js template with streaming function
+ [x] 7. Update demo.js template with streaming function
 
   **What to do**:
   - Add runChatWithToolsStreaming() function:
@@ -393,7 +393,7 @@ Wave FINAL - Verification:
     Expected Result: Both have streaming function
     Evidence: .sisyphus/evidence/task-7-streaming.txt
 
-- [ ] 8. Update demo.ts template with streaming function
+ [x] 8. Update demo.ts template with streaming function
 
   **What to do**:
   - Same as Task 7 but for TypeScript template
@@ -425,7 +425,7 @@ Wave FINAL - Verification:
     Expected Result: Streaming present
     Evidence: .sisyphus/evidence/task-8-streaming-ts.txt
 
-- [ ] 9. Update tests for new flags + multi-server
+ [x] 9. Update tests for new flags + multi-server
 
   **What to do**:
   - Update tests/cli.test.js:
@@ -467,7 +467,7 @@ Wave FINAL - Verification:
 
 ## Final Verification Wave
 
-- [ ] F1. All tests pass - `node --test`
+ [x] F1. All tests pass - `node --test`
 
 ---
 

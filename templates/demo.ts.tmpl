@@ -162,6 +162,199 @@ export async function runChatWithTools(userMessage: string): Promise<string> {
 
   throw new Error('Max iterations reached');
 }
+/**
+ * Run a chat completion with tool calls (streaming version)
+ * @param userMessage - The user's message
+ * @param onChunk - Callback for each streaming chunk
+ * @returns The final assistant response
+ */
+export async function runChatWithToolsStreaming(
+  userMessage: string,
+  onChunk?: (type: 'content' | 'tool_calls', data: any) => void
+): Promise<string> {
+  const messages = [
+    { role: 'user', content: userMessage }
+  ];
+
+  let iteration = 0;
+  const maxIterations = 10;
+
+  while (iteration < maxIterations) {
+    iteration++;
+
+    {{#if isOpenAI}}
+    // Call OpenAI Chat Completions API with streaming and tools
+    const stream = await client.chat.completions.create({
+      model: process.env.OPENAI_MODEL || 'gpt-4o',
+      messages: messages as any,
+      tools: tools as any,
+      tool_choice: 'auto',
+      stream: true
+    });
+
+    let fullContent = '';
+    let toolCalls: any[] = [];
+
+    // Process streaming response
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+      
+      if (delta?.content) {
+        fullContent += delta.content;
+        if (onChunk) onChunk('content', delta.content);
+      }
+      
+      if (delta?.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const existingIdx = toolCalls.findIndex(t => t.id === tc.id);
+          if (existingIdx >= 0) {
+            if (tc.function?.arguments) {
+              toolCalls[existingIdx].function.arguments += tc.function.arguments;
+            }
+          } else {
+            toolCalls.push({
+              id: tc.id,
+              type: tc.type,
+              function: {
+                name: tc.function?.name || '',
+                arguments: tc.function?.arguments || ''
+              }
+            });
+          }
+        }
+        if (onChunk) onChunk('tool_calls', toolCalls);
+      }
+    }
+
+    // Handle tool calls
+    if (toolCalls.length > 0) {
+      console.log(`Iteration ${iteration}: Processing ${toolCalls.length} tool call(s)`);
+
+      const assistantMessage = {
+        role: 'assistant',
+        content: fullContent,
+        tool_calls: toolCalls.map(tc => ({
+          id: tc.id,
+          type: tc.type,
+          function: {
+            name: tc.function.name,
+            arguments: tc.function.arguments
+          }
+        }))
+      };
+      messages.push(assistantMessage as any);
+
+      for (const toolCall of toolCalls) {
+        const toolName = toolCall.function.name;
+        const toolArgs = JSON.parse(toolCall.function.arguments);
+
+        console.log(`  Calling tool: ${toolName}`, toolArgs);
+
+        const handler = handlers[toolName];
+        if (handler) {
+          const result = await handler(toolArgs);
+          console.log(`  Result:`, result);
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(result)
+          } as any);
+        } else {
+          console.error(`  No handler found for: ${toolName}`);
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ error: `No handler for ${toolName}` })
+          } as any);
+        }
+      }
+    } else {
+      return fullContent;
+    }
+    {{/if}}
+
+    {{#if isAnthropic}}
+    // Call Anthropic Messages API (mock streaming since Anthropic doesn't support streaming with tools)
+    const response = await client.messages.create({
+      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      messages: messages as any,
+      tools: tools as any
+    });
+
+    // Mock streaming response with setInterval chunks
+    const textContent = response.content.find(block => block.type === 'text');
+    if (textContent) {
+      const text = textContent.text;
+      const chars = text.split('');
+      let fullContent = '';
+      
+      // Simulate streaming with setInterval
+      for (let i = 0; i < chars.length; i++) {
+        fullContent += chars[i];
+        if (onChunk) onChunk('content', chars[i]);
+        // Add small delay to simulate network
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      
+      // Check for tool use
+      const toolUses = response.content.filter(block => block.type === 'tool_use');
+      
+      if (toolUses.length > 0) {
+        console.log(`Iteration ${iteration}: Processing ${toolUses.length} tool use(s)`);
+
+        messages.push({
+          role: 'assistant',
+          content: response.content
+        } as any);
+
+        for (const toolUse of toolUses) {
+          const toolName = toolUse.name;
+          const toolInput = toolUse.input;
+
+          console.log(`  Using tool: ${toolName}`, toolInput);
+
+          const handler = handlers[toolName];
+          if (handler) {
+            const result = await handler(toolInput);
+            console.log(`  Result:`, result);
+
+            messages.push({
+              role: 'user',
+              content: [
+                {
+                  type: 'tool_result',
+                  tool_use_id: toolUse.id,
+                  content: JSON.stringify(result)
+                }
+              ]
+            } as any);
+          } else {
+            console.error(`  No handler found for: ${toolName}`);
+            messages.push({
+              role: 'user',
+              content: [
+                {
+                  type: 'tool_result',
+                  tool_use_id: toolUse.id,
+                  content: JSON.stringify({ error: `No handler for ${toolName}` })
+                }
+              ]
+            } as any);
+          }
+        }
+      } else {
+        return fullContent;
+      }
+    } else {
+      return '';
+    }
+    {{/if}}
+  }
+
+  throw new Error('Max iterations reached');
+}
 
 // Example usage
 async function main() {
@@ -180,4 +373,32 @@ async function main() {
 // Run if executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   main();
+}
+
+// Streaming example usage
+async function mainStreaming() {
+  const message = process.argv[3] || process.argv[2] || 'Hello, what tools are available?';
+
+  try {
+    console.log(`User: ${message}`);
+    console.log('\nAssistant (streaming):');
+    
+    const response = await runChatWithToolsStreaming(message, (type, chunk) => {
+      if (type === 'content') {
+        process.stdout.write(chunk);
+      } else if (type === 'tool_calls') {
+        console.log('\n[Tool calls detected]');
+      }
+    });
+    
+    console.log('\n\nFinal response:', response);
+  } catch (error) {
+    console.error('Error:', error.message);
+    process.exit(1);
+  }
+}
+
+// Run streaming if executed with --stream flag
+if (process.argv.includes('--stream') && import.meta.url === `file://${process.argv[1]}`) {
+  mainStreaming();
 }
