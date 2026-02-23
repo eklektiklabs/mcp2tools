@@ -85,10 +85,10 @@ Or for stdio:
 ## Output
 
 Generates:
- `tools.js` / `tools.ts` - Tool definitions and handlers
- `demo.js` / `demo.ts` - Chat completion demo with tool call handling (includes streaming & non-streaming functions)
- `config.json` - Copied configuration
- `README.md` - Documentation (unless `--no-docs`)
+ - `tools.js` / `tools.ts` - Tool definitions and handlers
+ - `demo.js` / `demo.ts` - Chat completion demo with tool call handling (includes streaming & non-streaming functions)
+ - `config.json` - Copied configuration
+ - `README.md` - Documentation (unless `--no-docs`)
 
 ## API
 
