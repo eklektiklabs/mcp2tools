@@ -19,14 +19,17 @@ mcp-to-tools generate --config <path> --output <path> [options]
 | Flag | Description |
 |------|-------------|
 | `--config <path>` | Path to MCP server config JSON (required) |
+| `--configs <paths>` | Comma-separated paths to multiple MCP configs |
 | `--output <path>` | Output directory (required) |
-| `--typescript` | Generate TypeScript instead of JavaScript |
 | `--type <value>` | Provider type: `anthropic` (default) or `openai` |
+| `--typescript` | Generate TypeScript instead of JavaScript |
 | `--no-docs` | Don't generate README.md |
 | `--tools <names>` | Comma-separated list of tool names to export |
 | `--name <string>` | Override name from config |
 | `--force` | Overwrite existing output files |
 | `--dry-run` | Preview without writing files |
+| `-v, --verbose` | Enable verbose output |
+| `--no-cache` | Disable caching |
 
 ### Examples
 
@@ -45,6 +48,15 @@ mcp-to-tools generate --config ./mcp-config.json --output ./output --type openai
 
 # Generate TypeScript with OpenAI format
 mcp-to-tools generate --config ./mcp-config.json --output ./output --type openai --typescript
+
+# Multi-server (tools prefixed with server name)
+mcp-to-tools generate --configs ./config1.json,./config2.json --output ./output
+
+# Verbose output
+mcp-to-tools generate --config ./mcp-config.json --output ./output --verbose
+
+# Disable caching
+mcp-to-tools generate --config ./mcp-config.json --output ./output --no-cache
 ```
 
 ## Configuration
@@ -74,7 +86,7 @@ Or for stdio:
 
 Generates:
  `tools.js` / `tools.ts` - Tool definitions and handlers
- `demo.js` / `demo.ts` - Chat completion demo with tool call handling
+ `demo.js` / `demo.ts` - Chat completion demo with tool call handling (includes streaming & non-streaming functions)
  `config.json` - Copied configuration
  `README.md` - Documentation (unless `--no-docs`)
 
