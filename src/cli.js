@@ -19,7 +19,9 @@ const VALID_FLAGS = [
   'name',
   'force',
   'dry-run',
-  'help'
+  'help',
+  'verbose',
+  'no-cache'
 ];
 
 const VALID_SUBCOMMANDS = ['generate', 'help'];
@@ -38,7 +40,9 @@ export const parseArgs = (argv) => {
       tools: null,
       name: null,
       force: false,
-      dryRun: false
+      dryRun: false,
+      verbose: false,
+      noCache: false
     };
   }
 
@@ -59,7 +63,9 @@ export const parseArgs = (argv) => {
       tools: null,
       name: null,
       force: false,
-      dryRun: false
+      dryRun: false,
+      verbose: false,
+      noCache: false
     };
   }
 
@@ -73,20 +79,25 @@ export const parseArgs = (argv) => {
     tools: null,
     name: null,
     force: false,
-    dryRun: false
+    dryRun: false,
+    verbose: false,
+    noCache: false
   };
 
   const flagArgs = args.slice(1);
   
   for (let i = 0; i < flagArgs.length; i++) {
     const arg = flagArgs[i];
-    
+    // Handle -v shorthand
+    if (arg === '-v') {
+      result.verbose = true;
+      continue;
+    }
     if (!arg.startsWith('--')) {
       throw McpError(`Unknown argument: ${arg}. Flags must start with --`);
     }
 
     const flag = arg.slice(2);
-    
     if (!VALID_FLAGS.includes(flag)) {
       throw McpError(`Unknown flag: --${flag}. Valid flags: ${VALID_FLAGS.map(f => '--' + f).join(', ')}`);
     }
@@ -105,6 +116,14 @@ export const parseArgs = (argv) => {
     }
     if (flag === 'dry-run') {
       result.dryRun = true;
+      continue;
+    }
+    if (flag === 'verbose') {
+      result.verbose = true;
+      continue;
+    }
+    if (flag === 'no-cache') {
+      result.noCache = true;
       continue;
     }
 
@@ -162,14 +181,10 @@ const validateArgs = (args) => {
 
 const printHelp = () => {
   console.log(`mcp-to-tools CLI
-
 Usage: mcp-to-tools <command> [options]
-
 Commands:
   generate    Generate MCP server tools
   help        Show this help message
-
-Options:
   --config <path>     Path to MCP server config JSON (required for generate)
   --output <path>    Output directory (required for generate)
   --type <value>      Provider type: anthropic (default) or openai
@@ -179,15 +194,15 @@ Options:
   --name <string>    Override name from config
   --force            Overwrite existing output files
   --dry-run          Preview without writing files
-
+  -v, --verbose      Enable verbose output
+  --no-cache         Disable caching
 Example:
   mcp-to-tools generate --config ./mcp-config.json --output ./output --typescript
 `);
 };
 
 const generateCommand = async (args) => {
-  const { config, output, type, typescript, noDocs, tools, name, force, dryRun } = args;
-  
+  const { config, output, type, typescript, noDocs, tools, name, force, dryRun, verbose, noCache } = args;
   // Debug output for testing
   console.log(`Command: ${args.command}`);
   console.log(`Config: ${config}`);
@@ -199,11 +214,17 @@ const generateCommand = async (args) => {
   console.log(`Name: ${name}`);
   console.log(`Force: ${force}`);
   console.log(`Dry Run: ${dryRun}`);
+  console.log(`Verbose: ${verbose}`);
+  console.log(`No Cache: ${noCache}`);
   
   console.log('Generating MCP tools...');
   
   // Load config
   const loadedConfig = loadConfig(config);
+  if (verbose) {
+    console.debug(`[verbose] Config loaded: ${loadedConfig.name} (${loadedConfig.type})`);
+    console.debug(`[verbose] Config details: ${JSON.stringify({ command: loadedConfig.command, args: loadedConfig.args, url: loadedConfig.url })}`);
+  }
   
   // Override name if provided
   if (name) {
@@ -214,7 +235,11 @@ const generateCommand = async (args) => {
   
   // Introspect MCP server
   console.log('Introspecting MCP server...');
-  let mcpTools = await introspectMcpServer(loadedConfig);
+  if (verbose) {
+    console.debug(`[verbose] Attempting MCP server connection...`);
+    console.debug(`[verbose] Connection options: ${JSON.stringify({ verbose, noCache })}`);
+  }
+  let mcpTools = await introspectMcpServer(loadedConfig, { verbose, noCache });
   
   // Filter tools if specified
   if (tools && tools.length > 0) {
@@ -223,6 +248,10 @@ const generateCommand = async (args) => {
   }
   
   console.log(`Found ${mcpTools.length} tool(s)`);
+  if (verbose) {
+    console.debug(`[verbose] Tool count after introspection: ${mcpTools.length}`);
+    console.debug(`[verbose] Tools: ${mcpTools.map(t => t.name).join(', ')}`);
+  }
   
   // Prepare output directory
   const outputDir = path.resolve(output);
@@ -292,7 +321,9 @@ const generateCommand = async (args) => {
   
   for (const file of filesToWrite) {
     fs.writeFileSync(file.path, file.content, 'utf-8');
-    console.log(`  Written: ${path.relative(process.cwd(), file.path)}`);
+    if (verbose) {
+      console.debug(`[verbose] Written: ${path.relative(process.cwd(), file.path)} (${file.content.length} bytes)`);
+    }
   }
   
   console.log('\nDone!');
