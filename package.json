@@ -1,6 +1,6 @@
 {
   "name": "mcp-to-tools",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Convert MCP tools to standalone CLI tools",
   "type": "module",
   "bin": {
@@ -10,6 +10,10 @@
     "test": "node --test",
     "start": "node src/cli.js"
   },
-  "keywords": ["mcp", "cli", "tools"],
+  "keywords": [
+    "mcp",
+    "cli",
+    "tools"
+  ],
   "license": "MIT"
 }
