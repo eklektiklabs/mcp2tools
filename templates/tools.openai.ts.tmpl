@@ -1,0 +1,46 @@
+// OpenAI tools template (TypeScript)
+// Generated from: {{templateName}}
+
+{{#if description}}
+/**
+ * {{description}}
+ */
+{{/if}}
+
+export interface OpenAITool {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: object;
+  };
+}
+
+export const tools: OpenAITool[] = [
+{{#each tools}}
+  {
+    type: 'function',
+    function: {
+      name: '{{name}}',
+      description: '{{description}}',
+      parameters: {{input_schema}}
+    }
+  },
+{{/each}}
+];
+
+{{#if hasHandlers}}
+export interface Handlers {
+{{#each tools}}
+  {{name}}: (params: object) => Promise<unknown>;
+{{/each}}
+}
+
+export const createHandlers = (client: Handlers) => ({
+{{#each tools}}
+  {{name}}: async (params: object) => {
+    return client.{{name}}(params);
+  },
+{{/each}}
+});
+{{/if}}

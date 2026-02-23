@@ -1,0 +1,40 @@
+// Anthropic tools template (TypeScript)
+// Generated from: {{templateName}}
+
+{{#if description}}
+/**
+ * {{description}}
+ */
+{{/if}}
+
+export interface Tool {
+  name: string;
+  description: string;
+  input_schema: object;
+}
+
+export const tools: Tool[] = [
+{{#each tools}}
+  {
+    name: '{{name}}',
+    description: '{{description}}',
+    input_schema: {{input_schema}}
+  },
+{{/each}}
+];
+
+{{#if hasHandlers}}
+export interface Handlers {
+{{#each tools}}
+  {{name}}: (params: object) => Promise<unknown>;
+{{/each}}
+}
+
+export const createHandlers = (client: Handlers) => ({
+{{#each tools}}
+  {{name}}: async (params: object) => {
+    return client.{{name}}(params);
+  },
+{{/each}}
+});
+{{/if}}

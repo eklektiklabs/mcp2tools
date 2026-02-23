@@ -1,0 +1,30 @@
+// OpenAI tools template
+// Generated from: {{templateName}}
+
+{{#if description}}
+/**
+ * {{description}}
+ */
+{{/if}}
+export const tools = [
+{{#each tools}}
+  {
+    type: 'function',
+    function: {
+      name: '{{name}}',
+      description: '{{description}}',
+      parameters: {{input_schema}}
+    }
+  },
+{{/each}}
+];
+
+{{#if hasHandlers}}
+export const createHandlers = (client) => ({
+{{#each tools}}
+  {{name}}: async (params) => {
+    return client.{{name}}(params);
+  },
+{{/each}}
+});
+{{/if}}

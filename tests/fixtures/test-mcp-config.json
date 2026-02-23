@@ -1,0 +1,5 @@
+{
+  "server": "test-server",
+  "transport": "http",
+  "url": "http://localhost:3002/mcp"
+}

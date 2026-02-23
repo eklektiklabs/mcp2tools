@@ -1,0 +1,183 @@
+// Demo: Chat completion with tool calls
+// Type: {{type}}
+
+import { tools } from './tools.js';
+{{#if hasHandlers}}
+import { createHandlers } from './tools.js';
+{{/if}}
+{{#if isOpenAI}}
+import OpenAI from 'openai';
+{{/if}}
+{{#if isAnthropic}}
+import Anthropic from '@anthropic-ai/sdk';
+{{/if}}
+
+// Initialize client
+{{#if isOpenAI}}
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || 'your-api-key-here',
+  baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
+});
+{{/if}}
+{{#if isAnthropic}}
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY || 'your-api-key-here'
+});
+{{/if}}
+
+{{#if hasHandlers}}
+const handlers = createHandlers(client);
+{{/if}}
+
+/**
+ * Run a chat completion with tool calls
+ * @param {string} userMessage - The user's message
+ * @returns {Promise<string>} The final assistant response
+ */
+export async function runChatWithTools(userMessage) {
+  const messages = [
+    { role: 'user', content: userMessage }
+  ];
+
+  let iteration = 0;
+  const maxIterations = 10;
+
+  while (iteration < maxIterations) {
+    iteration++;
+
+    {{#if isOpenAI}}
+    // Call OpenAI Chat Completions API with tools
+    const response = await client.chat.completions.create({
+      model: process.env.OPENAI_MODEL || 'gpt-4o',
+      messages: messages,
+      tools: tools,
+      tool_choice: 'auto'
+    });
+
+    const assistantMessage = response.choices[0].message;
+    messages.push(assistantMessage);
+
+    // Handle tool calls
+    if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+      console.log(`Iteration ${iteration}: Processing ${assistantMessage.tool_calls.length} tool call(s)`);
+
+      for (const toolCall of assistantMessage.tool_calls) {
+        const toolName = toolCall.function.name;
+        const toolArgs = JSON.parse(toolCall.function.arguments);
+
+        console.log(`  Calling tool: ${toolName}`, toolArgs);
+
+        // Execute the tool handler
+        const handler = handlers[toolName];
+        if (handler) {
+          const result = await handler(toolArgs);
+          console.log(`  Result:`, result);
+
+          // Add tool result to messages
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(result)
+          });
+        } else {
+          console.error(`  No handler found for: ${toolName}`);
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ error: `No handler for ${toolName}` })
+          });
+        }
+      }
+    } else {
+      // No more tool calls, return the response
+      return assistantMessage.content;
+    }
+    {{/if}}
+
+    {{#if isAnthropic}}
+    // Call Anthropic Messages API with tools
+    const response = await client.messages.create({
+      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      messages: messages,
+      tools: tools
+    });
+
+    // Check for tool use in response
+    const toolUses = response.content.filter(block => block.type === 'tool_use');
+
+    if (toolUses.length > 0) {
+      console.log(`Iteration ${iteration}: Processing ${toolUses.length} tool use(s)`);
+
+      // Add assistant message with tool use to conversation
+      messages.push({
+        role: 'assistant',
+        content: response.content
+      });
+
+      for (const toolUse of toolUses) {
+        const toolName = toolUse.name;
+        const toolInput = toolUse.input;
+
+        console.log(`  Using tool: ${toolName}`, toolInput);
+
+        // Execute the tool handler
+        const handler = handlers[toolName];
+        if (handler) {
+          const result = await handler(toolInput);
+          console.log(`  Result:`, result);
+
+          // Add tool result to messages
+          messages.push({
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: toolUse.id,
+                content: JSON.stringify(result)
+              }
+            ]
+          });
+        } else {
+          console.error(`  No handler found for: ${toolName}`);
+          messages.push({
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: toolUse.id,
+                content: JSON.stringify({ error: `No handler for ${toolName}` })
+              }
+            ]
+          });
+        }
+      }
+    } else {
+      // No tool use, return the text content
+      const textContent = response.content.find(block => block.type === 'text');
+      return textContent ? textContent.text : '';
+    }
+    {{/if}}
+  }
+
+  throw new Error('Max iterations reached');
+}
+
+// Example usage
+async function main() {
+  const message = process.argv[2] || 'Hello, what tools are available?';
+
+  try {
+    console.log(`User: ${message}`);
+    const response = await runChatWithTools(message);
+    console.log(`\nAssistant: ${response}`);
+  } catch (error) {
+    console.error('Error:', error.message);
+    process.exit(1);
+  }
+}
+
+// Run if executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}
